@@ -156,7 +156,7 @@ func (e *Engine) Start(ctx context.Context, proc *engine.Step) error {
 
 			volMounts = append(volMounts, v1.VolumeMount{
 				Name:      volumeName(vol.Name),
-				MountPath: volumeMountPath(vol.Name),
+				MountPath: volumeMountPath(vol.Target),
 			})
 		}
 
