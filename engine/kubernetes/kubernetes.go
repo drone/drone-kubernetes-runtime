@@ -2,9 +2,12 @@ package kubernetes
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 	"time"
+
+	"net/url"
 
 	"github.com/drone/drone-runtime/engine"
 	"k8s.io/api/core/v1"
@@ -14,12 +17,15 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/remotecommand"
 )
 
 type Engine struct {
 	client       *kubernetes.Clientset
+	config       *rest.Config
 	namespace    string
 	storageClass string
 }
@@ -32,8 +38,9 @@ func WithConfig(masterURL, kubeconfigPath string) Option {
 		if err != nil {
 			return err
 		}
+		e.config = config
 
-		e.client, err = kubernetes.NewForConfig(config)
+		e.client, err = kubernetes.NewForConfig(e.config)
 		return err
 	}
 }
@@ -115,9 +122,15 @@ func (e *Engine) Create(ctx context.Context, proc *engine.Step) error {
 }
 
 func (e *Engine) Start(ctx context.Context, proc *engine.Step) error {
-	workingDir := proc.WorkingDir
-	if proc.Alias == "clone" && len(proc.Volumes) > 0 {
-		workingDir = volumeMountPath(proc.Volumes[0].Name)
+	//workingDir := proc.WorkingDir
+	//if proc.Alias == "clone" && len(proc.Volumes) > 0 {
+	//	workingDir = volumeMountPath(proc.Volumes[0].Target)
+	//}
+
+	fmt.Printf("proc: %+v\n", proc)
+
+	for _, r := range proc.Restore {
+		fmt.Printf("%+v\n", r.Data)
 	}
 
 	pod := &v1.Pod{
@@ -133,7 +146,7 @@ func (e *Engine) Start(ctx context.Context, proc *engine.Step) error {
 				Image:      proc.Image,
 				Command:    proc.Entrypoint,
 				Args:       proc.Command,
-				WorkingDir: workingDir,
+				WorkingDir: proc.WorkingDir,
 				Env:        mapToEnvVars(proc.Environment),
 			}},
 		},
@@ -248,7 +261,14 @@ func (e *Engine) Tail(ctx context.Context, proc *engine.Step) (io.ReadCloser, er
 }
 
 func (e *Engine) Upload(ctx context.Context, proc *engine.Step, path string, r io.Reader) error {
-	panic("implement me")
+	exec, err := remotecommand.NewSPDYExecutor(e.config, "", &url.URL{})
+	if err != nil {
+		return err
+	}
+
+	exec.Stream(remotecommand.StreamOptions{})
+
+	return nil
 }
 
 func (e *Engine) Download(ctx context.Context, proc *engine.Step, path string) (io.ReadCloser, *engine.FileInfo, error) {
