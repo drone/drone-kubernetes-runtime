@@ -10,6 +10,7 @@ import (
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -120,11 +121,47 @@ func (e *Engine) Start(ctx context.Context, proc *engine.Step) error {
 		workingDir = volumeMountPath(proc.Volumes[0].Name)
 	}
 
+	for _, n := range proc.Networks {
+		// We don't need a service, if we don't have ports
+		if len(n.Ports) == 0 {
+			continue
+		}
+
+		var ports []v1.ServicePort
+		for _, p := range n.Ports {
+			ports = append(ports, v1.ServicePort{
+				Name:       dnsName(n.Aliases[0]),
+				Port:       int32(p),
+				TargetPort: intstr.IntOrString{IntVal: int32(p)},
+			})
+		}
+
+		svc := &v1.Service{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      dnsName(n.Aliases[0]),
+				Namespace: e.namespace,
+			},
+			Spec: v1.ServiceSpec{
+				Type: v1.ServiceTypeClusterIP,
+				Selector: map[string]string{
+					"step": dnsName(proc.Alias),
+				},
+				Ports: ports,
+			},
+		}
+
+		if _, err := e.client.CoreV1().Services(e.namespace).Create(svc); err != nil {
+			panic(err)
+		}
+	}
+
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      dnsName(proc.Name),
 			Namespace: e.namespace,
-			Labels:    proc.Labels,
+			Labels: map[string]string{
+				"step": dnsName(proc.Alias),
+			},
 		},
 		Spec: v1.PodSpec{
 			RestartPolicy: v1.RestartPolicyNever,
@@ -257,25 +294,34 @@ func (e *Engine) Download(ctx context.Context, proc *engine.Step, path string) (
 
 func (e *Engine) Destroy(ctx context.Context, conf *engine.Config) error {
 	var gracePeriodSeconds int64 = 0 // immediately
-
 	dpb := metav1.DeletePropagationBackground
+
+	deleteOpts := &metav1.DeleteOptions{
+		GracePeriodSeconds: &gracePeriodSeconds,
+		PropagationPolicy:  &dpb,
+	}
 
 	for _, stage := range conf.Stages {
 		for _, step := range stage.Steps {
-			opts := &metav1.DeleteOptions{
-				GracePeriodSeconds: &gracePeriodSeconds,
-				PropagationPolicy:  &dpb,
+			if err := e.client.CoreV1().Pods(e.namespace).Delete(dnsName(step.Name), deleteOpts); err != nil {
+				return err
 			}
 
-			if err := e.client.CoreV1().Pods(e.namespace).Delete(dnsName(step.Name), opts); err != nil {
-				return err
+			for _, n := range step.Networks {
+				// We don't need a service, if we don't have ports
+				if len(n.Ports) == 0 {
+					continue
+				}
+				if err := e.client.CoreV1().Services(e.namespace).Delete(dnsName(n.Aliases[0]), deleteOpts); err != nil {
+					return err
+				}
 			}
 		}
 	}
 
 	if len(conf.Volumes) > 0 {
 		vol := volumeName(conf.Volumes[0].Name)
-		return e.client.CoreV1().PersistentVolumeClaims(e.namespace).Delete(vol, &metav1.DeleteOptions{})
+		return e.client.CoreV1().PersistentVolumeClaims(e.namespace).Delete(vol, deleteOpts)
 	}
 
 	return nil

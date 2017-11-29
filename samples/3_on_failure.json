@@ -15,7 +15,7 @@
 						"-c"
 					],
 					"command": [
-						"set -e; set -x; echo this step will fail the pipeline; exit 1"
+						"set -e; set -x; echo this step will fail the pipeline && sleep 5; exit 1"
 					],
 					"on_success": true
 				}
@@ -35,7 +35,7 @@
 						"-c"
 					],
 					"command": [
-						"set -e; set -x; echo this step must execute on failure"
+						"set -e; set -x; echo this step must execute on failure && sleep 5"
 					],
 					"on_success": true,
 					"on_failure": true

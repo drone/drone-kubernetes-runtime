@@ -15,7 +15,7 @@
 						"-c"
 					],
 					"command": [
-						"echo hello world"
+						"echo hello world && sleep 5"
 					],
 					"on_success": true
 				}

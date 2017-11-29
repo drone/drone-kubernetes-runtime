@@ -15,7 +15,7 @@
 						"-c"
 					],
 					"command": [
-						"set -e; set -x; echo hello > greeting.txt"
+						"set -e; set -x; echo hello > greeting.txt && sleep 5"
 					],
 					"volumes": [
 						{
@@ -41,7 +41,7 @@
 						"-c"
 					],
 					"command": [
-						"set -e; set -x; cat greeting.txt"
+						"set -e; set -x; cat greeting.txt && sleep 5"
 					],
 					"volumes": [
 						{
