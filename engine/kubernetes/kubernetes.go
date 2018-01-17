@@ -189,12 +189,13 @@ func (e *Engine) Start(ctx context.Context, proc *engine.Step) error {
 		Spec: v1.PodSpec{
 			RestartPolicy: v1.RestartPolicyNever,
 			Containers: []v1.Container{{
-				Name:       dnsName(proc.Alias),
-				Image:      proc.Image,
-				Command:    proc.Entrypoint,
-				Args:       proc.Command,
-				WorkingDir: workingDir,
-				Env:        mapToEnvVars(proc.Environment),
+				Name:            dnsName(proc.Alias),
+				Image:           proc.Image,
+				ImagePullPolicy: v1.PullAlways,
+				Command:         proc.Entrypoint,
+				Args:            proc.Command,
+				WorkingDir:      workingDir,
+				Env:             mapToEnvVars(proc.Environment),
 			}},
 		},
 	}
@@ -304,7 +305,6 @@ func (e *Engine) Tail(ctx context.Context, proc *engine.Step) (io.ReadCloser, er
 		SubResource("log").
 		VersionedParams(opts, scheme.ParameterCodec).
 		Stream()
-
 }
 
 func (e *Engine) Upload(ctx context.Context, proc *engine.Step, path string, r io.Reader) error {
