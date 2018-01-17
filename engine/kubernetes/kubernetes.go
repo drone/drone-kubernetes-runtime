@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"context"
 	"io"
+	"os"
 	"strings"
 	"time"
 
@@ -75,6 +76,28 @@ func New(opts ...Option) (*Engine, error) {
 	}
 
 	return e, nil
+}
+
+func NewEnv() (*Engine, error) {
+	var opts []Option
+
+	masterURL := os.Getenv("DRONE_KUBERNETES_MASTER")
+	kubeconfig := os.Getenv("DRONE_KUBERNETES_KUBECONFIG")
+	if masterURL != "" || kubeconfig != "" {
+		opts = append(opts, WithConfig(masterURL, kubeconfig))
+	}
+
+	if ns := os.Getenv("DRONE_KUBERNETES_NAMESPACE"); ns != "" {
+		opts = append(opts, WithNamespace(ns))
+	}
+
+	if sc := os.Getenv("DRONE_KUBERNETES_STORAGE"); sc != "" {
+		opts = append(opts, WithStorageClass(sc))
+	}
+
+	//WithConfig(c.masterURL, c.kubeconfig),
+
+	return New(opts...)
 }
 
 // Setup creates a PersistentVolumeClaim which will be shared across all pods/containers in the pipeline
