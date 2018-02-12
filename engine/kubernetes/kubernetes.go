@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -178,6 +179,19 @@ func (e *Engine) Start(ctx context.Context, proc *engine.Step) error {
 		}
 	}
 
+	entrypoint := proc.Entrypoint
+	command := proc.Command
+	if len(proc.Command) > 0 {
+		entrypoint = []string{"/bin/sh"}
+		command = []string{
+			"-c",
+			fmt.Sprintf("date; (%s); ret=$?; date; exit $ret", proc.Command[0]), // TODO [0]
+		}
+	}
+
+	fmt.Printf("entrypoint: %s\n", entrypoint)
+	fmt.Printf("command: %s\n", command)
+
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      dnsName(proc.Name),
@@ -192,8 +206,8 @@ func (e *Engine) Start(ctx context.Context, proc *engine.Step) error {
 				Name:            dnsName(proc.Alias),
 				Image:           proc.Image,
 				ImagePullPolicy: v1.PullAlways,
-				Command:         proc.Entrypoint,
-				Args:            proc.Command,
+				Command:         entrypoint,
+				Args:            command,
 				WorkingDir:      workingDir,
 				Env:             mapToEnvVars(proc.Environment),
 			}},
