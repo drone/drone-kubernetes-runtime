@@ -242,6 +242,36 @@ func (e *Engine) Create(ctx context.Context, proc *engine.Step) error {
 	return err
 }
 
+func (e *Engine) Start(ctx context.Context, proc *engine.Step) error {
+	// We don't need to start the container if it hasn't a special command
+	if len(proc.Command) == 0 {
+		return nil
+	}
+
+	running := make(chan bool)
+
+	var podUpdated = func(old interface{}, new interface{}) {
+		pod := new.(*v1.Pod)
+		if pod.Name == dnsName(proc.Name) {
+			running <- true
+		}
+	}
+
+	si := informers.NewSharedInformerFactory(e.client, 5*time.Minute)
+	si.Core().V1().Pods().Informer().AddEventHandler(
+		cache.ResourceEventHandlerFuncs{
+			UpdateFunc: podUpdated,
+		},
+	)
+	si.Start(wait.NeverStop)
+
+	<-running
+
+	fmt.Println("The Pod is running now!!!")
+
+	return nil
+}
+
 func (e *Engine) Wait(ctx context.Context, proc *engine.Step) (*engine.State, error) {
 	finished := make(chan bool)
 
