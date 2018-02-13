@@ -135,11 +135,6 @@ func (e *Engine) Setup(ctx context.Context, conf *engine.Config) error {
 }
 
 func (e *Engine) Create(ctx context.Context, proc *engine.Step) error {
-	// TODO: Is this actually needed for Kubernetes? Can we do something smart here?
-	return nil
-}
-
-func (e *Engine) Start(ctx context.Context, proc *engine.Step) error {
 	workingDir := proc.WorkingDir
 	if proc.Alias == "clone" && len(proc.Volumes) > 0 {
 		workingDir = volumeMountPath(proc.Volumes[0].Name)
@@ -182,10 +177,12 @@ func (e *Engine) Start(ctx context.Context, proc *engine.Step) error {
 	entrypoint := proc.Entrypoint
 	command := proc.Command
 	if len(proc.Command) > 0 {
+		until := "until [ -f /tmp/continue ]; do sleep 1; done; rm /tmp/continue"
+
 		entrypoint = []string{"/bin/sh"}
 		command = []string{
 			"-c",
-			fmt.Sprintf("date; (%s); ret=$?; date; exit $ret", proc.Command[0]), // TODO [0]
+			fmt.Sprintf("%s; (%s); ret=$?; %s; exit $ret", until, proc.Command[0], until), // TODO [0]
 		}
 	}
 
