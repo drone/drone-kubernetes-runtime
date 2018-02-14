@@ -1,9 +1,11 @@
 package kubernetes
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -17,12 +19,17 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/remotecommand"
+	"k8s.io/kubernetes/pkg/api"
+	"k8s.io/kubernetes/pkg/api/legacyscheme"
 )
 
 type Engine struct {
 	client       *kubernetes.Clientset
+	config       *rest.Config
 	namespace    string
 	storageClass string
 }
@@ -36,7 +43,9 @@ func WithConfig(masterURL, kubeconfigPath string) Option {
 			return err
 		}
 
-		e.client, err = kubernetes.NewForConfig(config)
+		e.config = config
+		e.client, err = kubernetes.NewForConfig(e.config)
+
 		return err
 	}
 }
@@ -252,7 +261,7 @@ func (e *Engine) Start(ctx context.Context, proc *engine.Step) error {
 
 	var podUpdated = func(old interface{}, new interface{}) {
 		pod := new.(*v1.Pod)
-		if pod.Name == dnsName(proc.Name) {
+		if pod.Name == dnsName(proc.Name) && pod.Status.Phase == v1.PodRunning {
 			running <- true
 		}
 	}
@@ -269,7 +278,36 @@ func (e *Engine) Start(ctx context.Context, proc *engine.Step) error {
 
 	fmt.Println("The Pod is running now!!!")
 
-	return nil
+	req := e.client.RESTClient().Post().
+		Resource("pods").
+		Name(dnsName(proc.Name)).
+		Namespace(e.namespace).
+		SubResource("exec")
+
+	req.VersionedParams(&api.PodExecOptions{
+		Command: "date",
+	}, legacyscheme.ParameterCodec)
+
+	executor, err := remotecommand.NewSPDYExecutor(e.config, http.MethodPost, req.URL())
+	if err != nil {
+		return err
+	}
+
+	stdout := bytes.NewBuffer(nil)
+	stderr := bytes.NewBuffer(nil)
+
+	err = executor.Stream(
+		remotecommand.StreamOptions{
+			Stdin:  strings.NewReader("/bin/sh -c env"),
+			Stdout: stdout,
+			Stderr: stderr,
+			Tty:    true,
+		})
+
+	fmt.Printf("%+v\n", stdout.String())
+	fmt.Printf("%+v\n", stderr.String())
+
+	return err
 }
 
 func (e *Engine) Wait(ctx context.Context, proc *engine.Step) (*engine.State, error) {
