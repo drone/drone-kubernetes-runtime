@@ -1,0 +1,23 @@
+[[constraint]]
+  branch = "master"
+  name = "github.com/drone/drone-runtime"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/drone/signal"
+
+[[constraint]]
+  name = "github.com/mattn/go-isatty"
+  version = "0.0.3"
+
+[[constraint]]
+  name = "k8s.io/api"
+  revision = "11147472b7c934c474a2c484af3c0c5210b7a3af" # kubernetes-1.9.3
+
+[[constraint]]
+  name = "k8s.io/apimachinery"
+  revision = "180eddb345a5be3a157cea1c624700ad5bd27b8f" # kubernetes-1.9.3
+
+[[constraint]]
+  name = "k8s.io/client-go"
+  version = "6.0.0"
