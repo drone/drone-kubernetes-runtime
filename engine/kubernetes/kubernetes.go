@@ -14,6 +14,7 @@ import (
 	"k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
@@ -23,8 +24,6 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/remotecommand"
-	"k8s.io/kubernetes/pkg/api"
-	"k8s.io/kubernetes/pkg/api/legacyscheme"
 )
 
 type Engine struct {
@@ -276,17 +275,22 @@ func (e *Engine) Start(ctx context.Context, proc *engine.Step) error {
 
 	<-running
 
-	fmt.Println("The Pod is running now!!!")
-
 	req := e.client.RESTClient().Post().
 		Resource("pods").
 		Name(dnsName(proc.Name)).
 		Namespace(e.namespace).
-		SubResource("exec")
+		SubResource("exec").
+		Context(ctx)
 
-	req.VersionedParams(&api.PodExecOptions{
-		Command: "date",
-	}, legacyscheme.ParameterCodec)
+	req = req.VersionedParams(&v1.PodExecOptions{
+		Container: dnsName(proc.Alias),
+		Command:   []string{"echo 'pod exec'"},
+		Stdin:     true,
+		Stdout:    true,
+		Stderr:    true,
+		TTY:       true,
+	}, runtime.NewParameterCodec(runtime.NewScheme()))
+
 
 	executor, err := remotecommand.NewSPDYExecutor(e.config, http.MethodPost, req.URL())
 	if err != nil {
@@ -298,14 +302,14 @@ func (e *Engine) Start(ctx context.Context, proc *engine.Step) error {
 
 	err = executor.Stream(
 		remotecommand.StreamOptions{
-			Stdin:  strings.NewReader("/bin/sh -c env"),
+			Stdin:  strings.NewReader("uname"),
 			Stdout: stdout,
 			Stderr: stderr,
 			Tty:    true,
 		})
-
-	fmt.Printf("%+v\n", stdout.String())
-	fmt.Printf("%+v\n", stderr.String())
+	fmt.Printf("stdout: %+v\n", stdout.String())
+	fmt.Printf("stderr: %+v\n", stderr.String())
+	fmt.Printf("err: %+v\n", err)
 
 	return err
 }
