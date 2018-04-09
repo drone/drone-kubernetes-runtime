@@ -15,7 +15,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -149,19 +148,20 @@ func (e *Engine) Create(ctx context.Context, proc *engine.Step) error {
 	}
 
 	for _, n := range proc.Networks {
+		// TODO(metalmatze): Ports need to be added upstream
 		// We don't need a service, if we don't have ports
-		if len(n.Ports) == 0 {
-			continue
-		}
+		//if len(n.Ports) == 0 {
+		//	continue
+		//}
 
-		var ports []v1.ServicePort
-		for _, p := range n.Ports {
-			ports = append(ports, v1.ServicePort{
-				Name:       dnsName(n.Aliases[0]),
-				Port:       int32(p),
-				TargetPort: intstr.IntOrString{IntVal: int32(p)},
-			})
-		}
+		//var ports []v1.ServicePort
+		//for _, p := range n.Ports {
+		//	ports = append(ports, v1.ServicePort{
+		//		Name:       dnsName(n.Aliases[0]),
+		//		Port:       int32(p),
+		//		TargetPort: intstr.IntOrString{IntVal: int32(p)},
+		//	})
+		//}
 
 		svc := &v1.Service{
 			ObjectMeta: metav1.ObjectMeta{
@@ -173,7 +173,7 @@ func (e *Engine) Create(ctx context.Context, proc *engine.Step) error {
 				Selector: map[string]string{
 					"step": dnsName(proc.Alias),
 				},
-				Ports: ports,
+				//Ports: ports, TODO(metalmatze): Ports need to be added upstream
 			},
 		}
 
@@ -290,7 +290,6 @@ func (e *Engine) Start(ctx context.Context, proc *engine.Step) error {
 		Stderr:    true,
 		TTY:       true,
 	}, runtime.NewParameterCodec(runtime.NewScheme()))
-
 
 	executor, err := remotecommand.NewSPDYExecutor(e.config, http.MethodPost, req.URL())
 	if err != nil {
@@ -414,10 +413,11 @@ func (e *Engine) Destroy(ctx context.Context, conf *engine.Config) error {
 			}
 
 			for _, n := range step.Networks {
+				// TODO(metalmatze): Ports need to be added upstream
 				// We don't need a service, if we don't have ports
-				if len(n.Ports) == 0 {
-					continue
-				}
+				//if len(n.Ports) == 0 {
+				//	continue
+				//}
 				if err := e.client.CoreV1().Services(e.namespace).Delete(dnsName(n.Aliases[0]), deleteOpts); err != nil {
 					return err
 				}
