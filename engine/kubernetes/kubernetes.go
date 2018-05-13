@@ -9,9 +9,7 @@ import (
 
 	"github.com/drone/drone-runtime/engine"
 	"k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
@@ -21,9 +19,8 @@ import (
 )
 
 type Engine struct {
-	client       *kubernetes.Clientset
-	namespace    string
-	storageClass string
+	client    *kubernetes.Clientset
+	namespace string
 }
 
 type Option func(e *Engine) error
@@ -47,18 +44,10 @@ func WithNamespace(ns string) Option {
 	}
 }
 
-func WithStorageClass(sc string) Option {
-	return func(e *Engine) error {
-		e.storageClass = sc
-		return nil
-	}
-}
-
 // New returns a new Kubernetes Engine.
 func New(opts ...Option) (*Engine, error) {
 	e := &Engine{
-		namespace:    metav1.NamespaceDefault,
-		storageClass: "generic", // TODO: set the default storage class here
+		namespace: metav1.NamespaceDefault,
 	}
 
 	for _, opt := range opts {
@@ -91,12 +80,6 @@ func NewEnv() (*Engine, error) {
 		opts = append(opts, WithNamespace(ns))
 	}
 
-	if sc := os.Getenv("DRONE_KUBERNETES_STORAGE"); sc != "" {
-		opts = append(opts, WithStorageClass(sc))
-	}
-
-	//WithConfig(c.masterURL, c.kubeconfig),
-
 	return New(opts...)
 }
 
@@ -108,23 +91,14 @@ func (e *Engine) Setup(ctx context.Context, conf *engine.Config) error {
 	}
 
 	for _, vol := range conf.Volumes {
-		pvc := &v1.PersistentVolumeClaim{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      volumeName(vol.Name),
-				Namespace: e.namespace,
-			},
-			Spec: v1.PersistentVolumeClaimSpec{
-				AccessModes:      []v1.PersistentVolumeAccessMode{v1.ReadWriteOnce},
-				StorageClassName: &e.storageClass,
-				Resources: v1.ResourceRequirements{
-					Requests: v1.ResourceList{
-						v1.ResourceStorage: resource.MustParse("1G"),
-					},
-				},
-			},
+		pv := PersistentVolume("kubermatic-rwhxp9j5j-tho2x", e.namespace, vol.Name)
+		_, err := e.client.CoreV1().PersistentVolumes().Create(pv)
+		if err != nil {
+			return err
 		}
 
-		_, err := e.client.CoreV1().PersistentVolumeClaims(e.namespace).Create(pvc)
+		pvc := PersistentVolumeClaim(e.namespace, vol.Name)
+		_, err = e.client.CoreV1().PersistentVolumeClaims(e.namespace).Create(pvc)
 		if err != nil {
 			return err
 		}
@@ -134,99 +108,18 @@ func (e *Engine) Setup(ctx context.Context, conf *engine.Config) error {
 }
 
 func (e *Engine) Create(ctx context.Context, proc *engine.Step) error {
-	// TODO: Is this actually needed for Kubernetes? Can we do something smart here?
 	return nil
 }
 
 func (e *Engine) Start(ctx context.Context, proc *engine.Step) error {
-	workingDir := proc.WorkingDir
-	if proc.Alias == "clone" && len(proc.Volumes) > 0 {
-		workingDir = volumeMountPath(proc.Volumes[0].Name)
-	}
-
 	for _, n := range proc.Networks {
-		// We don't need a service, if we don't have ports
-		if len(n.Ports) == 0 {
-			continue
-		}
-
-		var ports []v1.ServicePort
-		for _, p := range n.Ports {
-			ports = append(ports, v1.ServicePort{
-				Name:       dnsName(n.Aliases[0]),
-				Port:       int32(p),
-				TargetPort: intstr.IntOrString{IntVal: int32(p)},
-			})
-		}
-
-		svc := &v1.Service{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      dnsName(n.Aliases[0]),
-				Namespace: e.namespace,
-			},
-			Spec: v1.ServiceSpec{
-				Type: v1.ServiceTypeClusterIP,
-				Selector: map[string]string{
-					"step": dnsName(proc.Alias),
-				},
-				Ports: ports,
-			},
-		}
-
+		svc := Service(e.namespace, n.Aliases[0], proc.Alias)
 		if _, err := e.client.CoreV1().Services(e.namespace).Create(svc); err != nil {
-			panic(err)
+			return err
 		}
 	}
 
-	pod := &v1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      dnsName(proc.Name),
-			Namespace: e.namespace,
-			Labels: map[string]string{
-				"step": dnsName(proc.Alias),
-			},
-		},
-		Spec: v1.PodSpec{
-			RestartPolicy: v1.RestartPolicyNever,
-			Containers: []v1.Container{{
-				Name:            dnsName(proc.Alias),
-				Image:           proc.Image,
-				ImagePullPolicy: v1.PullAlways,
-				Command:         proc.Entrypoint,
-				Args:            proc.Command,
-				WorkingDir:      workingDir,
-				Env:             mapToEnvVars(proc.Environment),
-			}},
-		},
-	}
-
-	if len(proc.Volumes) > 0 {
-		var vols []v1.Volume
-		var volMounts []v1.VolumeMount
-
-		for _, vol := range proc.Volumes {
-			vols = append(vols, v1.Volume{
-				Name: volumeName(vol.Name),
-				VolumeSource: v1.VolumeSource{
-					PersistentVolumeClaim: &v1.PersistentVolumeClaimVolumeSource{
-						ClaimName: volumeName(vol.Name),
-						ReadOnly:  false,
-					},
-				},
-			})
-
-			volMounts = append(volMounts, v1.VolumeMount{
-				Name:      volumeName(vol.Name),
-				MountPath: volumeMountPath(vol.Target),
-			})
-		}
-
-		pod.Spec.Volumes = vols
-		for i := range pod.Spec.Containers {
-			pod.Spec.Containers[i].VolumeMounts = volMounts
-		}
-	}
-
+	pod := Pod(e.namespace, proc)
 	_, err := e.client.CoreV1().Pods(e.namespace).Create(pod)
 	return err
 }
@@ -308,11 +201,11 @@ func (e *Engine) Tail(ctx context.Context, proc *engine.Step) (io.ReadCloser, er
 }
 
 func (e *Engine) Upload(ctx context.Context, proc *engine.Step, path string, r io.Reader) error {
-	panic("implement me")
+	panic("won't be implemented")
 }
 
 func (e *Engine) Download(ctx context.Context, proc *engine.Step, path string) (io.ReadCloser, *engine.FileInfo, error) {
-	panic("implement me")
+	panic("won't be implemented")
 }
 
 func (e *Engine) Destroy(ctx context.Context, conf *engine.Config) error {
@@ -331,42 +224,33 @@ func (e *Engine) Destroy(ctx context.Context, conf *engine.Config) error {
 			}
 
 			for _, n := range step.Networks {
-				// We don't need a service, if we don't have ports
-				if len(n.Ports) == 0 {
-					continue
-				}
-				if err := e.client.CoreV1().Services(e.namespace).Delete(dnsName(n.Aliases[0]), deleteOpts); err != nil {
+				svc := Service(e.namespace, n.Aliases[0], step.Alias)
+				if err := e.client.CoreV1().Services(e.namespace).Delete(svc.Name, deleteOpts); err != nil {
 					return err
 				}
 			}
 		}
 	}
 
-	if len(conf.Volumes) > 0 {
-		vol := volumeName(conf.Volumes[0].Name)
-		return e.client.CoreV1().PersistentVolumeClaims(e.namespace).Delete(vol, deleteOpts)
+	for _, vol := range conf.Volumes {
+		pvc := PersistentVolumeClaim(e.namespace, vol.Name)
+		err := e.client.CoreV1().PersistentVolumeClaims(e.namespace).Delete(pvc.Name, deleteOpts)
+		if err != nil {
+			return err
+		}
+
+		pv := PersistentVolume("kubermatic-rwhxp9j5j-tho2x", e.namespace, vol.Name)
+		err = e.client.CoreV1().PersistentVolumes().Delete(pv.Name, deleteOpts)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
 }
 
-func mapToEnvVars(m map[string]string) []v1.EnvVar {
-	var ev []v1.EnvVar
-	for k, v := range m {
-		ev = append(ev, v1.EnvVar{
-			Name:  k,
-			Value: v,
-		})
-	}
-	return ev
-}
-
 func dnsName(i string) string {
 	return strings.Replace(i, "_", "-", -1)
-}
-
-func volumeName(i string) string {
-	return dnsName(strings.Split(i, ":")[0])
 }
 
 func volumeMountPath(i string) string {
