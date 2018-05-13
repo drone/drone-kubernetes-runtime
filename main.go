@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/drone/drone-kubernetes-runtime/engine/kubernetes"
@@ -17,7 +18,6 @@ import (
 	"github.com/drone/drone-runtime/version"
 	"github.com/drone/signal"
 	"github.com/mattn/go-isatty"
-	"path/filepath"
 )
 
 var tty = isatty.IsTerminal(os.Stdout.Fd())
@@ -29,10 +29,9 @@ func main() {
 		timeout time.Duration
 		version bool
 
-		kubeconfig   string
-		masterURL    string
-		namespace    string
-		storageclass string
+		kubeconfig string
+		masterURL  string
+		namespace  string
 	}{}
 
 	flag.StringVar(&c.chroot, "chroot", "", "")
@@ -43,7 +42,6 @@ func main() {
 	flag.StringVar(&c.kubeconfig, "kubeconfig", filepath.Join(os.Getenv("HOME"), ".kube/config"), "")
 	flag.StringVar(&c.masterURL, "masterurl", "", "")
 	flag.StringVar(&c.namespace, "namespace", "default", "")
-	flag.StringVar(&c.storageclass, "storageclass", "generic", "")
 
 	flag.Parse()
 
@@ -62,18 +60,17 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	var engine engine.Engine
+	var e engine.Engine
 	if c.plugin == "" {
-		engine, err = kubernetes.New(
+		e, err = kubernetes.New(
 			kubernetes.WithConfig(c.masterURL, c.kubeconfig),
 			kubernetes.WithNamespace(c.namespace),
-			kubernetes.WithStorageClass(c.storageclass),
 		)
 		if err != nil {
 			log.Fatalln(err)
 		}
 	} else {
-		engine, err = plugin.Open(c.plugin)
+		e, err = plugin.Open(c.plugin)
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -95,7 +92,7 @@ func main() {
 
 	r := runtime.New(
 		runtime.WithFileSystem(fs),
-		runtime.WithEngine(engine),
+		runtime.WithEngine(e),
 		runtime.WithConfig(config),
 		runtime.WithHooks(hooks),
 	)
