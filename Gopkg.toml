@@ -1,0 +1,32 @@
+[[constraint]]
+  branch = "master"
+  name = "github.com/drone/drone-runtime"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/drone/signal"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/golang/glog"
+
+[[constraint]]
+  name = "github.com/mattn/go-isatty"
+  version = "0.0.3"
+
+[[constraint]]
+  name = "k8s.io/api"
+  revision = "73d903622b7391f3312dcbac6483fed484e185f8"
+
+[[constraint]]
+  name = "k8s.io/apimachinery"
+  revision = "302974c03f7e50f16561ba237db776ab93594ef6"
+
+[[constraint]]
+  name = "k8s.io/client-go"
+  version = "7.0.0"
+
+[prune]
+  go-tests = true
+  non-go = true
+  unused-packages = true
