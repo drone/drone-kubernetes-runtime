@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"context"
 	"io"
+	"math/rand"
 	"os"
 	"strings"
 	"time"
@@ -17,6 +18,10 @@ import (
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 )
+
+func init() {
+	rand.Seed(time.Now().UnixNano())
+}
 
 type Engine struct {
 	client    *kubernetes.Clientset
@@ -90,8 +95,21 @@ func (e *Engine) Setup(ctx context.Context, conf *engine.Config) error {
 		return nil
 	}
 
+	nodeList, err := e.client.CoreV1().Nodes().List(metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+
+	var nodeNames []string
+	for _, n := range nodeList.Items {
+		nodeNames = append(nodeNames, n.Name)
+	}
+
+	// Pick random node for now.
+	node := nodeNames[rand.Intn(len(nodeNames)-1)]
+
 	for _, vol := range conf.Volumes {
-		pv := PersistentVolume("kubermatic-rwhxp9j5j-tho2x", e.namespace, vol.Name)
+		pv := PersistentVolume(node, e.namespace, vol.Name)
 		_, err := e.client.CoreV1().PersistentVolumes().Create(pv)
 		if err != nil {
 			return err
@@ -249,7 +267,7 @@ func (e *Engine) Destroy(ctx context.Context, conf *engine.Config) error {
 			return err
 		}
 
-		pv := PersistentVolume("kubermatic-rwhxp9j5j-tho2x", e.namespace, vol.Name)
+		pv := PersistentVolume("", "", vol.Name)
 		err = e.client.CoreV1().PersistentVolumes().Delete(pv.Name, deleteOpts)
 		if err != nil {
 			return err
