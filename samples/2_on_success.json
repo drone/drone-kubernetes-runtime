@@ -15,7 +15,7 @@
 						"-c"
 					],
 					"command": [
-						"set -e; set -x; echo this step will exit the pipeline; exit 1"
+						"set -e; set -x; echo this step will exit the pipeline; sleep 5; exit 1"
 					],
 					"on_success": true
 				}
