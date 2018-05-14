@@ -115,7 +115,10 @@ func (e *Engine) Start(ctx context.Context, step *engine.Step) error {
 	pod := Pod(e.namespace, step)
 
 	for _, n := range step.Networks {
-		svc := Service(e.namespace, n.Aliases[0], pod.Name)
+		svc := Service(e.namespace, n.Aliases[0], pod.Name, n.Ports)
+		if svc == nil {
+			continue
+		}
 		if _, err := e.client.CoreV1().Services(e.namespace).Create(svc); err != nil {
 			return err
 		}
@@ -228,7 +231,10 @@ func (e *Engine) Destroy(ctx context.Context, conf *engine.Config) error {
 			}
 
 			for _, n := range step.Networks {
-				svc := Service(e.namespace, n.Aliases[0], step.Alias)
+				svc := Service(e.namespace, n.Aliases[0], step.Alias, n.Ports)
+				if svc == nil {
+					continue
+				}
 				if err := e.client.CoreV1().Services(e.namespace).Delete(svc.Name, deleteOpts); err != nil {
 					return err
 				}
