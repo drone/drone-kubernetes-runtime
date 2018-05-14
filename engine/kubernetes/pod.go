@@ -1,6 +1,8 @@
 package kubernetes
 
 import (
+	"strings"
+
 	"github.com/drone/drone-runtime/engine"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -75,4 +77,12 @@ func mapToEnvVars(m map[string]string) []v1.EnvVar {
 		})
 	}
 	return ev
+}
+
+func volumeMountPath(i string) string {
+	s := strings.Split(i, ":")
+	if len(s) > 1 {
+		return s[1]
+	}
+	return s[0]
 }

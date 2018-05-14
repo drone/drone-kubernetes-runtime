@@ -5,7 +5,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func Service(namespace, name, stepName string) *v1.Service {
+func Service(namespace, name, podName string) *v1.Service {
 	//// We don't need a service, if we don't have ports
 	//if len(n.Ports) == 0 {
 	//	continue
@@ -28,7 +28,7 @@ func Service(namespace, name, stepName string) *v1.Service {
 		Spec: v1.ServiceSpec{
 			Type: v1.ServiceTypeClusterIP,
 			Selector: map[string]string{
-				"step": dnsName(stepName),
+				"step": podName,
 			},
 			//Ports: ports,
 		},

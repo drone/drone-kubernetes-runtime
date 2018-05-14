@@ -107,31 +107,33 @@ func (e *Engine) Setup(ctx context.Context, conf *engine.Config) error {
 	return nil
 }
 
-func (e *Engine) Create(ctx context.Context, proc *engine.Step) error {
+func (e *Engine) Create(ctx context.Context, step *engine.Step) error {
 	return nil
 }
 
-func (e *Engine) Start(ctx context.Context, proc *engine.Step) error {
-	for _, n := range proc.Networks {
-		svc := Service(e.namespace, n.Aliases[0], proc.Alias)
+func (e *Engine) Start(ctx context.Context, step *engine.Step) error {
+	pod := Pod(e.namespace, step)
+
+	for _, n := range step.Networks {
+		svc := Service(e.namespace, n.Aliases[0], pod.Name)
 		if _, err := e.client.CoreV1().Services(e.namespace).Create(svc); err != nil {
 			return err
 		}
 	}
 
-	pod := Pod(e.namespace, proc)
 	_, err := e.client.CoreV1().Pods(e.namespace).Create(pod)
 	return err
 }
 
-func (e *Engine) Wait(ctx context.Context, proc *engine.Step) (*engine.State, error) {
-	finished := make(chan bool)
+func (e *Engine) Wait(ctx context.Context, step *engine.Step) (*engine.State, error) {
+	podName := podName(step)
 
+	finished := make(chan bool)
 	var podUpdated = func(old interface{}, new interface{}) {
 		pod := new.(*v1.Pod)
-		if pod.Name == dnsName(proc.Name) {
+		if pod.Name == podName {
 			switch pod.Status.Phase {
-			case v1.PodSucceeded, v1.PodFailed:
+			case v1.PodSucceeded, v1.PodFailed, v1.PodUnknown:
 				finished <- true
 			}
 		}
@@ -147,7 +149,7 @@ func (e *Engine) Wait(ctx context.Context, proc *engine.Step) (*engine.State, er
 
 	<-finished
 
-	pod, err := e.client.CoreV1().Pods(e.namespace).Get(dnsName(proc.Name), metav1.GetOptions{
+	pod, err := e.client.CoreV1().Pods(e.namespace).Get(podName, metav1.GetOptions{
 		IncludeUninitialized: true,
 	})
 	if err != nil {
@@ -164,12 +166,14 @@ func (e *Engine) Wait(ctx context.Context, proc *engine.Step) (*engine.State, er
 
 }
 
-func (e *Engine) Tail(ctx context.Context, proc *engine.Step) (io.ReadCloser, error) {
+func (e *Engine) Tail(ctx context.Context, step *engine.Step) (io.ReadCloser, error) {
+	podName := podName(step)
+
 	up := make(chan bool)
 
 	var podUpdated = func(old interface{}, new interface{}) {
 		pod := new.(*v1.Pod)
-		if pod.Name == dnsName(proc.Name) {
+		if pod.Name == podName {
 			switch pod.Status.Phase {
 			case v1.PodRunning, v1.PodSucceeded, v1.PodFailed:
 				up <- true
@@ -193,18 +197,18 @@ func (e *Engine) Tail(ctx context.Context, proc *engine.Step) (io.ReadCloser, er
 
 	return e.client.CoreV1().RESTClient().Get().
 		Namespace(e.namespace).
-		Name(dnsName(proc.Name)).
+		Name(podName).
 		Resource("pods").
 		SubResource("log").
 		VersionedParams(opts, scheme.ParameterCodec).
 		Stream()
 }
 
-func (e *Engine) Upload(ctx context.Context, proc *engine.Step, path string, r io.Reader) error {
+func (e *Engine) Upload(ctx context.Context, step *engine.Step, path string, r io.Reader) error {
 	panic("won't be implemented")
 }
 
-func (e *Engine) Download(ctx context.Context, proc *engine.Step, path string) (io.ReadCloser, *engine.FileInfo, error) {
+func (e *Engine) Download(ctx context.Context, step *engine.Step, path string) (io.ReadCloser, *engine.FileInfo, error) {
 	panic("won't be implemented")
 }
 
@@ -219,7 +223,7 @@ func (e *Engine) Destroy(ctx context.Context, conf *engine.Config) error {
 
 	for _, stage := range conf.Stages {
 		for _, step := range stage.Steps {
-			if err := e.client.CoreV1().Pods(e.namespace).Delete(dnsName(step.Name), deleteOpts); err != nil {
+			if err := e.client.CoreV1().Pods(e.namespace).Delete(podName(step), deleteOpts); err != nil {
 				return err
 			}
 
@@ -251,12 +255,4 @@ func (e *Engine) Destroy(ctx context.Context, conf *engine.Config) error {
 
 func dnsName(i string) string {
 	return strings.Replace(i, "_", "-", -1)
-}
-
-func volumeMountPath(i string) string {
-	s := strings.Split(i, ":")
-	if len(s) > 1 {
-		return s[1]
-	}
-	return s[0]
 }
