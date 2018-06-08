@@ -14,7 +14,6 @@
   version = "v1.1.0"
 
 [[projects]]
-  branch = "master"
   name = "github.com/drone/drone-runtime"
   packages = [
     "engine",
@@ -24,7 +23,7 @@
     "runtime/term",
     "version"
   ]
-  revision = "e96c9405557fc74a820e7b3ff60a3d5ab875a37c"
+  revision = "e4290469aff73fe621e04a3e8a291e65b3a2ce37"
 
 [[projects]]
   branch = "master"
@@ -415,6 +414,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "8d007b00c936a45965ce423108021452a428bac1c41dc0568cb57c332565916b"
+  inputs-digest = "ce375db344b08b84b66bab7b5539cfe68dd67537673e1b9146e1278e3d002f06"
   solver-name = "gps-cdcl"
   solver-version = 1

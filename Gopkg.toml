@@ -1,6 +1,6 @@
 [[constraint]]
-  branch = "master"
   name = "github.com/drone/drone-runtime"
+  revision = "e4290469aff73fe621e04a3e8a291e65b3a2ce37"
 
 [[constraint]]
   branch = "master"
