@@ -9,10 +9,6 @@ import (
 )
 
 func Pod(namespace string, step *engine.Step) *v1.Pod {
-	workingDir := step.WorkingDir
-	if step.Alias == "clone" && len(step.Volumes) > 0 {
-		workingDir = volumeMountPath(step.Volumes[0].Name)
-	}
 
 	// TODO: Move volumes stuff to volumes.go?
 	var vols []v1.Volume
@@ -30,7 +26,8 @@ func Pod(namespace string, step *engine.Step) *v1.Pod {
 
 		volMounts = append(volMounts, v1.VolumeMount{
 			Name:      volumeName(vol.Name),
-			MountPath: volumeMountPath(vol.Target),
+			MountPath: volumeMountPath(step.WorkingDir),
+			//MountPath: volumeMountPath(vol.Target),
 		})
 	}
 
@@ -55,7 +52,7 @@ func Pod(namespace string, step *engine.Step) *v1.Pod {
 				ImagePullPolicy: pullPolicy,
 				Command:         step.Entrypoint,
 				Args:            step.Command,
-				WorkingDir:      workingDir,
+				WorkingDir:      step.WorkingDir,
 				Env:             mapToEnvVars(step.Environment),
 				VolumeMounts:    volMounts,
 			}},
