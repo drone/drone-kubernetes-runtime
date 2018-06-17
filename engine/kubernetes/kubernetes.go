@@ -69,6 +69,8 @@ func New(opts ...Option) (*Engine, error) {
 		}
 	}
 
+	// TODO: Start informers here
+
 	return e, nil
 }
 
@@ -168,6 +170,7 @@ func (e *Engine) Wait(ctx context.Context, step *engine.Step) (*engine.State, er
 	)
 	si.Start(wait.NeverStop)
 
+	// TODO Cancel on ctx.Done
 	<-finished
 
 	pod, err := e.client.CoreV1().Pods(e.namespace).Get(podName, metav1.GetOptions{
@@ -226,7 +229,7 @@ func (e *Engine) Tail(ctx context.Context, step *engine.Step) (io.ReadCloser, er
 }
 
 func (e *Engine) Upload(ctx context.Context, step *engine.Step, path string, r io.Reader) error {
-	panic("won't be implemented")
+	return nil
 }
 
 func (e *Engine) Download(ctx context.Context, step *engine.Step, path string) (io.ReadCloser, *engine.FileInfo, error) {
