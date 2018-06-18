@@ -1,14 +1,40 @@
 package kubernetes
 
 import (
+	"archive/tar"
+	"bytes"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"os"
 	"strings"
 
 	"github.com/drone/drone-runtime/engine"
+	"github.com/vincent-petithory/dataurl"
 	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 func Pod(namespace string, step *engine.Step) *v1.Pod {
+	for _, snapshot := range step.Restore {
+		log.Println("source", string(snapshot.Source))
+
+		if len(snapshot.Source) == 0 {
+			log.Println("skipping snapshot")
+			continue
+		}
+
+		du, err := dataurl.DecodeString(string(snapshot.Source))
+		if err != nil {
+			log.Println(err)
+			return nil
+		}
+
+		r := tar.NewReader(bytes.NewReader(du.Data))
+		c, err := ioutil.ReadAll(r)
+
+		fmt.Fprintln(os.Stderr, string(c))
+	}
 
 	// TODO: Move volumes stuff to volumes.go?
 	var vols []v1.Volume
