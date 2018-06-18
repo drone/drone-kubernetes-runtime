@@ -4,7 +4,6 @@ import (
 	"archive/tar"
 	"bytes"
 	"encoding/base64"
-	"fmt"
 	"io"
 	"log"
 	"strings"
@@ -16,9 +15,6 @@ import (
 )
 
 func Pod(namespace string, step *engine.Step) (*v1.Pod, error) {
-
-	fmt.Println("step name", step.Name)
-
 	var script []byte
 	if !strings.HasSuffix(step.Name, "_clone") {
 		var err error
@@ -27,8 +23,6 @@ func Pod(namespace string, step *engine.Step) (*v1.Pod, error) {
 			return nil, err
 		}
 	}
-
-	fmt.Println("Decoded the script")
 
 	// TODO: Move volumes stuff to volumes.go?
 	var vols []v1.Volume
@@ -68,8 +62,6 @@ func Pod(namespace string, step *engine.Step) (*v1.Pod, error) {
 			Value: base64.StdEncoding.EncodeToString(script),
 		})
 	}
-
-	fmt.Println("")
 
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
