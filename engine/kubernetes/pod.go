@@ -3,10 +3,10 @@ package kubernetes
 import (
 	"archive/tar"
 	"bytes"
+	"encoding/base64"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
-	"os"
 	"strings"
 
 	"github.com/drone/drone-runtime/engine"
@@ -15,26 +15,20 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-func Pod(namespace string, step *engine.Step) *v1.Pod {
-	for _, snapshot := range step.Restore {
-		log.Println("source", string(snapshot.Source))
+func Pod(namespace string, step *engine.Step) (*v1.Pod, error) {
 
-		if len(snapshot.Source) == 0 {
-			log.Println("skipping snapshot")
-			continue
-		}
+	fmt.Println("step name", step.Name)
 
-		du, err := dataurl.DecodeString(string(snapshot.Source))
+	var script []byte
+	if !strings.HasSuffix(step.Name, "_clone") {
+		var err error
+		script, err = decodeScript(step.Restore)
 		if err != nil {
-			log.Println(err)
-			return nil
+			return nil, err
 		}
-
-		r := tar.NewReader(bytes.NewReader(du.Data))
-		c, err := ioutil.ReadAll(r)
-
-		fmt.Fprintln(os.Stderr, string(c))
 	}
+
+	fmt.Println("Decoded the script")
 
 	// TODO: Move volumes stuff to volumes.go?
 	var vols []v1.Volume
@@ -62,6 +56,21 @@ func Pod(namespace string, step *engine.Step) *v1.Pod {
 		pullPolicy = v1.PullAlways
 	}
 
+	command := step.Entrypoint
+	args := step.Command
+	envs := mapToEnvVars(step.Environment)
+
+	if !strings.HasSuffix(step.Name, "_clone") {
+		command = []string{"/bin/sh", "-c"}
+		args = []string{"echo $CI_SCRIPT | base64 -d | /bin/sh -e"}
+		envs = append(envs, v1.EnvVar{
+			Name:  "CI_SCRIPT",
+			Value: base64.StdEncoding.EncodeToString(script),
+		})
+	}
+
+	fmt.Println("")
+
 	return &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      podName(step),
@@ -76,15 +85,15 @@ func Pod(namespace string, step *engine.Step) *v1.Pod {
 				Name:            podName(step),
 				Image:           step.Image,
 				ImagePullPolicy: pullPolicy,
-				Command:         step.Entrypoint,
-				Args:            step.Command,
+				Command:         command,
+				Args:            args,
 				WorkingDir:      step.WorkingDir,
-				Env:             mapToEnvVars(step.Environment),
+				Env:             envs,
 				VolumeMounts:    volMounts,
 			}},
 			Volumes: vols,
 		},
-	}
+	}, nil
 }
 
 func podName(s *engine.Step) string {
@@ -108,4 +117,41 @@ func volumeMountPath(i string) string {
 		return s[1]
 	}
 	return s[0]
+}
+
+func decodeScript(snapshots []*engine.Snapshot) ([]byte, error) {
+	var script bytes.Buffer
+
+	for _, snapshot := range snapshots {
+		log.Println("source", string(snapshot.Source))
+
+		if len(snapshot.Source) == 0 {
+			continue
+		}
+
+		du, err := dataurl.DecodeString(string(snapshot.Source))
+		if err != nil {
+			return nil, nil
+		}
+
+		tr := tar.NewReader(bytes.NewReader(du.Data))
+		for {
+			hdr, err := tr.Next()
+			if err == io.EOF {
+				break // End of archive
+			}
+			if err != nil {
+				return nil, err
+			}
+
+			if hdr.Name == "bin/_drone" {
+				if _, err := io.Copy(&script, tr); err != nil {
+					log.Println(err)
+					return nil, nil
+				}
+			}
+		}
+	}
+
+	return script.Bytes(), nil
 }

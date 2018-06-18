@@ -132,7 +132,10 @@ func (e *Engine) Create(ctx context.Context, step *engine.Step) error {
 }
 
 func (e *Engine) Start(ctx context.Context, step *engine.Step) error {
-	pod := Pod(e.namespace, step)
+	pod, err := Pod(e.namespace, step)
+	if err != nil {
+		return err
+	}
 
 	for _, n := range step.Networks {
 		svc := Service(e.namespace, n.Aliases[0], pod.Name, n.Ports)
@@ -144,7 +147,7 @@ func (e *Engine) Start(ctx context.Context, step *engine.Step) error {
 		}
 	}
 
-	_, err := e.client.CoreV1().Pods(e.namespace).Create(pod)
+	_, err = e.client.CoreV1().Pods(e.namespace).Create(pod)
 	return err
 }
 
