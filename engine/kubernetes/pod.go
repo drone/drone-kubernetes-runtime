@@ -115,8 +115,6 @@ func decodeScript(snapshots []*engine.Snapshot) ([]byte, error) {
 	var script bytes.Buffer
 
 	for _, snapshot := range snapshots {
-		log.Println("source", string(snapshot.Source))
-
 		if len(snapshot.Source) == 0 {
 			continue
 		}

@@ -155,6 +155,7 @@ func (e *Engine) Wait(ctx context.Context, step *engine.Step) (*engine.State, er
 	podName := podName(step)
 
 	finished := make(chan bool)
+
 	var podUpdated = func(old interface{}, new interface{}) {
 		pod := new.(*v1.Pod)
 		if pod.Name == podName {
@@ -273,7 +274,7 @@ func (e *Engine) Destroy(ctx context.Context, conf *engine.Config) error {
 			return err
 		}
 
-		pv := PersistentVolume("", "", vol.Name)
+		pv := PersistentVolume("", e.namespace, vol.Name)
 		err = e.client.CoreV1().PersistentVolumes().Delete(pv.Name, deleteOpts)
 		if err != nil {
 			return err
