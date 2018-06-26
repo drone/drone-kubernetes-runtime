@@ -54,7 +54,7 @@ func Pod(namespace string, step *engine.Step) (*v1.Pod, error) {
 	args := step.Command
 	envs := mapToEnvVars(step.Environment)
 
-	if !strings.HasSuffix(step.Name, "_clone") {
+	if len(script) > 0 {
 		command = []string{"/bin/sh", "-c"}
 		args = []string{"echo $CI_SCRIPT | base64 -d | /bin/sh -e"}
 		envs = append(envs, v1.EnvVar{
